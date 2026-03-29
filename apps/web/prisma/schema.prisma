@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Auth (NextAuth / Auth.js required models) ──────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ── Users ──────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  /// Set from the provider login (e.g. GitHub username). Used in public URLs.
+  username      String?   @unique
+  /// Optional institutional affiliation for display purposes
+  institution   String?
+  accounts      Account[]
+  sessions      Session[]
+  courses       Course[]
+  enrollments   Enrollment[]
+  createdAt     DateTime  @default(now())
+}
+
+// ── Content ────────────────────────────────────────────────────────────────
+
+model Course {
+  id          String       @id @default(cuid())
+  slug        String
+  title       String
+  description String?
+  /// null = public; "enrolled" = requires enrollment; future: institution SSO
+  visibility  Visibility   @default(PUBLIC)
+  authorId    String
+  author      User         @relation(fields: [authorId], references: [id])
+  posts       Post[]
+  enrollments Enrollment[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([authorId, slug])
+}
+
+enum PostType {
+  POST
+  SLIDES
+}
+
+enum Visibility {
+  PUBLIC
+  ENROLLED
+}
+
+model Post {
+  id           String     @id @default(cuid())
+  slug         String
+  title        String
+  type         PostType   @default(POST)
+  sourceMd     String     @db.Text
+  renderedHtml String     @db.Text
+  /// For slides, a JSON array of per-slide HTML fragments
+  slidesJson   String?    @db.Text
+  published    Boolean    @default(false)
+  visibility   Visibility @default(PUBLIC)
+  courseId     String
+  course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  publishedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([courseId, slug])
+}
+
+// ── Access control ─────────────────────────────────────────────────────────
+
+/// Represents a student enrolled in a course (for ENROLLED-visibility content).
+/// Enrolment can be granted manually or via institutional email domain check.
+model Enrollment {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, courseId])
+}

@@ -1,0 +1,228 @@
+'use client'
+
+import { useState, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
+import type { PostType } from '@prisma/client'
+
+// CodeMirror must be loaded client-side only (browser APIs)
+const CodeMirror = dynamic(() => import('@uiw/react-codemirror'), { ssr: false })
+
+// Lazily imported to keep the initial bundle small
+async function getMarkdownExtension() {
+  const { markdown, markdownLanguage } = await import('@codemirror/lang-markdown')
+  const { languages } = await import('@codemirror/language-data')
+  return [markdown({ base: markdownLanguage, codeLanguages: languages })]
+}
+
+interface Course {
+  id: string
+  slug: string
+  title: string
+}
+
+interface Post {
+  id: string
+  title: string
+  slug: string
+  type: PostType
+  sourceMd: string
+  published: boolean
+  courseId: string
+}
+
+interface EditorClientProps {
+  initialPost: Post | null
+  courses: Course[]
+  username: string
+}
+
+const DEFAULT_MARKDOWN = `---
+title: Untitled
+type: post
+date: ${new Date().toISOString().slice(0, 10)}
+published: false
+---
+
+## Introduction
+
+Write your notes here. Math is supported inline: $e^{i\\pi} + 1 = 0$, and in display mode:
+
+$$
+\\int_{-\\infty}^{\\infty} e^{-x^2}\\, dx = \\sqrt{\\pi}
+$$
+
+---
+
+<!-- Use --- to start a new slide (slides mode only) -->
+`
+
+export function EditorClient({ initialPost, courses, username }: EditorClientProps) {
+  const [content, setContent] = useState(initialPost?.sourceMd ?? DEFAULT_MARKDOWN)
+  const [title, setTitle] = useState(initialPost?.title ?? '')
+  const [type, setType] = useState<PostType>(initialPost?.type ?? 'POST')
+  const [courseId, setCourseId] = useState(initialPost?.courseId ?? courses[0]?.id ?? '')
+  const [postSlug, setPostSlug] = useState(initialPost?.slug ?? '')
+  const [newCourseTitle, setNewCourseTitle] = useState('')
+  const [preview, setPreview] = useState<{ html?: string; slides?: string[] } | null>(null)
+  const [status, setStatus] = useState<'idle' | 'publishing' | 'saved' | 'error'>('idle')
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null)
+  const [extensions, setExtensions] = useState<Parameters<typeof CodeMirror>[0]['extensions']>([])
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Load CodeMirror extensions once on first mount
+  const onEditorMount = useCallback(async () => {
+    const exts = await getMarkdownExtension()
+    setExtensions(exts)
+  }, [])
+
+  const handleContentChange = useCallback(
+    (value: string) => {
+      setContent(value)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(async () => {
+        const res = await fetch('/api/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markdown: value, type }),
+        })
+        const data = await res.json()
+        setPreview(data)
+      }, 600)
+    },
+    [type],
+  )
+
+  const handlePublish = async (publish: boolean) => {
+    setStatus('publishing')
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postId: initialPost?.id,
+          title,
+          type,
+          courseId: courseId || undefined,
+          courseTitle: !courseId && newCourseTitle ? newCourseTitle : undefined,
+          postSlug,
+          markdown: content,
+          published: publish,
+        }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      setPublishedUrl(data.url)
+      setStatus('saved')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  const previewHtml =
+    type === 'SLIDES'
+      ? (preview?.slides ?? []).join('<hr />')
+      : preview?.html ?? ''
+
+  return (
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 57px)' }}>
+      {/* ── Toolbar ──────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b bg-gray-50 text-sm">
+        <input
+          className="flex-1 min-w-48 font-medium text-base border-0 bg-transparent outline-none placeholder-gray-400"
+          placeholder="Untitled"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+
+        <select
+          className="border rounded px-2 py-1 text-sm"
+          value={type}
+          onChange={(e) => setType(e.target.value as PostType)}
+        >
+          <option value="POST">Post</option>
+          <option value="SLIDES">Slides</option>
+        </select>
+
+        {courses.length > 0 ? (
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+          >
+            <option value="">+ New course…</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        {!courseId && (
+          <input
+            className="border rounded px-2 py-1 text-sm w-40"
+            placeholder="Course name"
+            value={newCourseTitle}
+            onChange={(e) => setNewCourseTitle(e.target.value)}
+          />
+        )}
+
+        <input
+          className="border rounded px-2 py-1 text-sm w-36"
+          placeholder="post-slug"
+          value={postSlug}
+          onChange={(e) => setPostSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+        />
+
+        <button
+          onClick={() => handlePublish(false)}
+          disabled={status === 'publishing'}
+          className="px-3 py-1 border rounded text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+        >
+          Save draft
+        </button>
+        <button
+          onClick={() => handlePublish(true)}
+          disabled={status === 'publishing'}
+          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {status === 'publishing' ? 'Publishing…' : 'Publish'}
+        </button>
+
+        {status === 'saved' && publishedUrl && (
+          <a
+            href={publishedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-green-600 hover:underline"
+          >
+            View ↗
+          </a>
+        )}
+        {status === 'error' && <span className="text-red-600">Error — check console</span>}
+      </div>
+
+      {/* ── Editor / Preview split ────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Editor pane */}
+        <div className="flex-1 overflow-auto font-mono text-sm" onFocus={onEditorMount}>
+          <CodeMirror
+            value={content}
+            extensions={extensions}
+            onChange={handleContentChange}
+            height="100%"
+            className="h-full"
+          />
+        </div>
+
+        {/* Preview pane */}
+        <div className="flex-1 overflow-auto border-l px-8 py-6">
+          <div
+            className="post-content"
+            dangerouslySetInnerHTML={{ __html: previewHtml || '<p class="text-gray-400 text-sm">Preview will appear here…</p>' }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}

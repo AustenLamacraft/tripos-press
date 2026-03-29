@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* KaTeX — self-hosted from npm (avoid CDN for GDPR compliance) */
+@import 'katex/dist/katex.min.css';
+
+/* highlight.js theme for code blocks rendered by rehype-highlight */
+@import 'highlight.js/styles/github.css';
+
+/* Post content prose overrides */
+.post-content {
+  @apply prose prose-slate max-w-none;
+}
+
+.post-content .katex-display {
+  @apply overflow-x-auto py-2;
+}
