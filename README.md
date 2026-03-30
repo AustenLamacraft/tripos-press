@@ -139,6 +139,7 @@ every source file would still be on the professor's machine.
 - Prose post viewer at `/:username/:course/:slug` with access control
 - Reveal.js slides viewer at `/present/:username/:course/:slug`
 - Separate root layout for slides (no nav chrome)
+- ⚠️ **Note:** Source markdown is stored in the database. Add export/download feature before production so professors can back up their sources.
 
 ### Phase 6 — Access control (next)
 - Enrollment model in place; enforcement in place at viewer level
@@ -147,9 +148,16 @@ every source file would still be on the professor's machine.
 - TODO: institutional SSO (SAML / OIDC via university IdP)
 
 ### Phase 7 — Local-first enhancements (planned)
-- File System Access API: open local folder → edit → publish
-- CLI: `tripos-press publish ./my-course/` (extracted from `content-pipeline` package)
-- Git remote: `git push tripos main` triggers publish
+This phase realizes the "local-first" design — professors keep authoritative copies on their machines.
+- TODO: Markdown export/download endpoint (`GET /api/posts/:id/markdown`) so professors can back up sources
+- TODO: File System Access API — editor button to open local folder, reads/writes files directly
+  - Track changes via `.tripos-press.json` metadata file (stores SHA256 hashes of each post)
+  - On folder open, compute hashes and compare; only upload modified files
+  - After successful publish, store new hashes to avoid re-uploading
+- TODO: Bulk import — upload a folder of `.md` files, auto-create posts
+- TODO: CLI: `tripos-press publish ./my-course/` (extracted from `content-pipeline` package)
+  - Use `git status` / `git diff` to detect modified files (assumes course is a git repo)
+- TODO: Git remote integration — `git push tripos main` triggers publish
 
 ### Phase 8 — Quality of life (planned)
 - PDF export via Puppeteer (headless Chrome prints the slides page)

@@ -23,8 +23,15 @@ export async function POST(req: NextRequest) {
   const { postId, title, type, postSlug, markdown, published = true } = body
   let { courseId, courseTitle } = body
 
-  if (!title || !postSlug || !markdown) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  const missing = []
+  if (!title) missing.push('title')
+  if (!postSlug) missing.push('postSlug')
+  if (!markdown) missing.push('markdown')
+  if (missing.length > 0) {
+    return NextResponse.json(
+      { error: `Missing required fields: ${missing.join(', ')}` },
+      { status: 400 }
+    )
   }
 
   // Resolve or create the course
