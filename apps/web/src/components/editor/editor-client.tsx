@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import type { PostType } from '@prisma/client'
+import { useFileSystemFolder } from '@/hooks/useFileSystemFolder'
 
 // CodeMirror must be loaded client-side only (browser APIs)
 const CodeMirror = dynamic(() => import('@uiw/react-codemirror'), { ssr: false })
@@ -69,6 +70,9 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
   const [extensions, setExtensions] = useState<Parameters<typeof CodeMirror>[0]['extensions']>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // File System Access API integration (Phase 7a)
+  const folderHook = useFileSystemFolder()
+
   // Load CodeMirror extensions once on first mount
   const onEditorMount = useCallback(async () => {
     const exts = await getMarkdownExtension()
@@ -125,6 +129,12 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
       setPublishedUrl(data.url)
+
+      // Phase 7a: After successful publish, sync metadata (save hashes to .tripos-press.json)
+      if (folderHook.state.folderHandle) {
+        await folderHook.syncMetadata()
+      }
+
       setStatus('saved')
     } catch (err) {
       setStatus('error')
@@ -237,7 +247,95 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
           </a>
         )}
         {status === 'error' && <span className="text-red-600">Error — check console</span>}
+
+        {/* ── Phase 7a: Folder open button ──────────────────────────────────── */}
+        <div className="ml-auto flex items-center gap-2 border-l pl-3">
+          {folderHook.state.folderHandle ? (
+            <>
+              <div className="text-xs text-gray-600">
+                <span className="font-medium">{folderHook.state.folderName}</span>
+                {folderHook.state.changes && (
+                  <span className="ml-2 text-gray-500">
+                    {folderHook.state.changes.modified.length > 0 && (
+                      <span className="text-orange-600">
+                        {folderHook.state.changes.modified.length} modified
+                      </span>
+                    )}
+                    {folderHook.state.changes.new.length > 0 && (
+                      <span className={folderHook.state.changes.modified.length > 0 ? ' • ' : ''}>
+                        <span className="text-blue-600">
+                          {folderHook.state.changes.new.length} new
+                        </span>
+                      </span>
+                    )}
+                    {folderHook.state.changes.unchanged.length > 0 && (
+                      <span className="ml-2 text-gray-400">
+                        {folderHook.state.changes.unchanged.length} unchanged
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => folderHook.closeFolder()}
+                className="py-1 px-2 rounded text-xs text-gray-600 hover:bg-gray-200"
+                title="Close folder"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => folderHook.openFolder()}
+              disabled={folderHook.state.isLoading}
+              className={`py-1 px-2 rounded text-xs ${
+                folderHook.state.isLoading
+                  ? 'text-gray-400 cursor-not-allowed'
+                  : 'text-gray-700 hover:bg-gray-200 cursor-pointer'
+              }`}
+              title="Open local folder (Phase 7a)"
+            >
+              {folderHook.state.isLoading ? 'Opening…' : '📁 Open folder'}
+            </button>
+          )}
+          {folderHook.state.error && (
+            <span className="text-xs text-red-600">{folderHook.state.error}</span>
+          )}
+        </div>
       </div>
+
+      {/* ── Folder panel (Phase 7a) ──────────────────────────────────── */}
+      {folderHook.state.folderHandle && folderHook.state.changes && (
+        <div className="border-b bg-blue-50 px-4 py-2 text-xs">
+          <details className="space-y-1">
+            <summary className="cursor-pointer font-medium text-blue-900">
+              📂 {folderHook.state.folderName} — {folderHook.state.changes.modified.length + folderHook.state.changes.new.length} changes
+            </summary>
+            <div className="pl-4 space-y-1 max-h-32 overflow-y-auto text-gray-700">
+              {folderHook.state.changes.modified.length > 0 && (
+                <>
+                  <div className="font-medium text-orange-700">Modified:</div>
+                  {folderHook.state.changes.modified.map((f) => (
+                    <div key={f} className="pl-2 text-orange-600">
+                      • {f}
+                    </div>
+                  ))}
+                </>
+              )}
+              {folderHook.state.changes.new.length > 0 && (
+                <>
+                  <div className="font-medium text-blue-700">New:</div>
+                  {folderHook.state.changes.new.map((f) => (
+                    <div key={f} className="pl-2 text-blue-600">
+                      • {f}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </details>
+        </div>
+      )}
 
       {/* ── Editor / Preview split ────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">

@@ -216,6 +216,7 @@ every source file would still be on the professor's machine.
 - CodeMirror 6 with markdown language support (loaded dynamically)
 - Split-pane: editor left, live preview right
 - Toolbar: title, type selector, course selector, slug field, Save/Publish
+- ⚠️ **TODO:** Slide preview is crude (joins slides with `<hr />`). Improve to show first slide or interactive carousel of slides.
 
 ### Phase 5 — Viewers ✅
 - Prose post viewer at `/:username/:course/:slug` with access control
