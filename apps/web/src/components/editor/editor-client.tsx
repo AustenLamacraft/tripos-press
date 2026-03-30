@@ -93,6 +93,19 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
   )
 
   const handlePublish = async (publish: boolean) => {
+    // Client-side validation
+    const errors = []
+    if (!title.trim()) errors.push('Title is required')
+    if (!postSlug.trim()) errors.push('Slug is required')
+    if (!content.trim()) errors.push('Content is required')
+    if (!courseId && !newCourseTitle.trim()) errors.push('Course name is required for new posts')
+
+    if (errors.length > 0) {
+      setStatus('error')
+      alert('Please fill in all fields:\n' + errors.join('\n'))
+      return
+    }
+
     setStatus('publishing')
     try {
       const res = await fetch('/api/publish', {
@@ -100,11 +113,11 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           postId: initialPost?.id,
-          title,
+          title: title.trim(),
           type,
           courseId: courseId || undefined,
-          courseTitle: !courseId && newCourseTitle ? newCourseTitle : undefined,
-          postSlug,
+          courseTitle: !courseId && newCourseTitle ? newCourseTitle.trim() : undefined,
+          postSlug: postSlug.trim(),
           markdown: content,
           published: publish,
         }),
@@ -113,8 +126,9 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
       const data = await res.json()
       setPublishedUrl(data.url)
       setStatus('saved')
-    } catch {
+    } catch (err) {
       setStatus('error')
+      alert('Error: ' + (err instanceof Error ? err.message : 'Unknown error'))
     }
   }
 
@@ -123,13 +137,22 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
       ? (preview?.slides ?? []).join('<hr />')
       : preview?.html ?? ''
 
+  // Check if form is valid
+  const isValid =
+    title.trim() &&
+    postSlug.trim() &&
+    content.trim() &&
+    (courseId || newCourseTitle.trim())
+
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 57px)' }}>
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b bg-gray-50 text-sm">
         <input
-          className="flex-1 min-w-48 font-medium text-base border-0 bg-transparent outline-none placeholder-gray-400"
-          placeholder="Untitled"
+          className={`flex-1 min-w-48 font-medium text-base border-0 bg-transparent outline-none placeholder-gray-400 ${
+            title.trim() ? '' : 'text-gray-400'
+          }`}
+          placeholder="Title (required)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
@@ -160,31 +183,45 @@ export function EditorClient({ initialPost, courses, username }: EditorClientPro
 
         {!courseId && (
           <input
-            className="border rounded px-2 py-1 text-sm w-40"
-            placeholder="Course name"
+            className={`border rounded px-2 py-1 text-sm w-40 ${
+              newCourseTitle.trim() ? '' : 'border-orange-300 bg-orange-50'
+            }`}
+            placeholder="Course name (required for new)"
             value={newCourseTitle}
             onChange={(e) => setNewCourseTitle(e.target.value)}
           />
         )}
 
         <input
-          className="border rounded px-2 py-1 text-sm w-36"
-          placeholder="post-slug"
+          className={`border rounded px-2 py-1 text-sm w-36 ${
+            postSlug.trim() ? '' : 'border-orange-300 bg-orange-50'
+          }`}
+          placeholder="post-slug (required)"
           value={postSlug}
           onChange={(e) => setPostSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
         />
 
         <button
           onClick={() => handlePublish(false)}
-          disabled={status === 'publishing'}
-          className="px-3 py-1 border rounded text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          disabled={!isValid || status === 'publishing'}
+          className={`px-3 py-1 border rounded text-gray-700 ${
+            isValid && status !== 'publishing'
+              ? 'hover:bg-gray-100 cursor-pointer'
+              : 'opacity-50 cursor-not-allowed'
+          }`}
+          title={!isValid ? 'Fill in all required fields' : ''}
         >
           Save draft
         </button>
         <button
           onClick={() => handlePublish(true)}
-          disabled={status === 'publishing'}
-          className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          disabled={!isValid || status === 'publishing'}
+          className={`px-3 py-1 bg-blue-600 text-white rounded ${
+            isValid && status !== 'publishing'
+              ? 'hover:bg-blue-700 cursor-pointer'
+              : 'opacity-50 cursor-not-allowed'
+          }`}
+          title={!isValid ? 'Fill in all required fields' : ''}
         >
           {status === 'publishing' ? 'Publishing…' : 'Publish'}
         </button>

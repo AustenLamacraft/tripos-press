@@ -104,11 +104,14 @@ model Post {
   visibility   Visibility @default(PUBLIC)
   courseId     String
   course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// Display order within the course (set by course.yaml). Null means unordered.
+  order        Int?
   publishedAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@unique([courseId, slug])
+  @@index([courseId, order])
 }
 
 // ── Access control ─────────────────────────────────────────────────────────

@@ -19,6 +19,49 @@ reveal.js — readers get fast, dependency-free HTML.
 
 ---
 
+## Vision & Positioning
+
+**What problem does Tripos Press solve?**
+
+University lecturers spend hundreds of hours writing lecture notes, slides, problem sheets. Today's options all have tradeoffs:
+
+- **Canvas / Blackboard:** Bloated LMS. Bury content in folders. Gradebook overhead. Institutional lock-in.
+- **Google Drive / OneDrive:** No public web presence. Friction for students to access.
+- **Obsidian Publish:** Single author. No multi-course organization. $8/month per vault. No enrollment/discovery.
+- **Hugo / Jekyll:** Own your domain. Great for blogs. Friction: git CLI, build step, no admin UI. No course model.
+
+**Tripos Press splits the difference:**
+
+- ✍️ **Write* in markdown.** Paste into the browser editor or keep files in git/local folder.
+- 📊 **Render slides & notes from the same source.** Same `---` separators become reveal.js slides.
+- 📐 **LaTeX first-class.** KaTeX renders server-side. Readers get plain HTML. No mathjax.js bloat.
+- 📚 **Course-centric, not personal.** Multiple courses, hierarchical organization, institutional scoping.
+- 🔗 **Local-first.** Your markdown lives on your machine or in git. Tripos Press is just the renderer.
+- 👥 **Student discovery.** Phase 6: students find courses, enroll, see updates. No LMS-style bureacracy.
+- 🚀 **Frictionless deployment.** Deploy to Vercel (5 min). Use your institution's login (Phase 6b).
+
+**Not a replacement for:**
+- Gradebook / assignment submission (use an LMS side-by-side)
+- Collaborative real-time editing (use Google Docs or Overleaf for that)
+- Video hosting (link out to YouTube/Kaltura)
+
+**Compare to alternatives:**
+
+| Feature | Canvas | Obsidian Publish | Hugo | Tripos Press |
+|---------|--------|------------------|------|--------------|
+| Write in markdown | ❌ | ✅ | ✅ | ✅ |
+| LaTeX support | ⚠️ (Mathjax) | ⚠️ (Plugin) | ⚠️ (Manual) | ✅ (KaTeX, native) |
+| Slides from markdown | ❌ | ❌ | ❌ | ✅ |
+| Multi-course | ✅ | ❌ | ❌ | ✅ |
+| Student enrollment | ✅ | ❌ | ❌ | ✅ (Phase 6) |
+| Local-first (git) | ❌ | ❌ | ✅ | ✅ (Phase 7) |
+| Free tier | ❌ | ❌ | ✅ | ✅ |
+| Owned data | ❌ | ❌ | ✅ | ✅ |
+| Browser editor | ⚠️ (clunky) | ✅ | ❌ | ✅ |
+| Institutional SSO | ✅ | ❌ | ❌ | ✅ (Phase 6b) |
+
+---
+
 ## Project structure
 
 ```
@@ -99,6 +142,45 @@ $$f(x) = \frac{a_0}{2} + \sum_{n=1}^{\infty} a_n \cos(nx) + b_n \sin(nx)$$
 For slides, `---` separates horizontal slides; `--` separates vertical sub-slides within a
 horizontal section.
 
+### Course structure and ordering
+
+Courses can be organized via an optional `course.yaml` manifest file (used in Phase 7). This
+file lives in the course folder alongside the `.md` files and specifies the course metadata,
+section grouping, and post ordering:
+
+```yaml
+# course.yaml
+title: "Part II Methods"
+description: "Advanced analysis and PDEs"
+institution: "University of Cambridge"  # optional
+
+# Flat list (simpler)
+posts:
+  - lecture-01
+  - lecture-02
+  - lecture-03
+  - problem-sheet-01
+
+# Or hierarchical with sections
+sections:
+  - title: "Unit 1: Fourier Series"
+    posts:
+      - lecture-01
+      - lecture-02
+      - lecture-03
+  - title: "Unit 2: Fourier Transforms"
+    posts:
+      - lecture-04
+      - lecture-05
+      - problem-sheet-01
+  - title: "Problem sets"
+    posts:
+      - problem-sheet-02
+```
+
+The `order` field on each post in the database is populated from this manifest. On publish,
+section structure can be used to organize the course landing page and TOC.
+
 ### Local-first publishing
 
 Professors can work entirely with local files:
@@ -139,24 +221,58 @@ every source file would still be on the professor's machine.
 - Prose post viewer at `/:username/:course/:slug` with access control
 - Reveal.js slides viewer at `/present/:username/:course/:slug`
 - Separate root layout for slides (no nav chrome)
+- ⚠️ **Limitation:** Images not yet supported. Workaround: embed as base64 data URIs in markdown. Phase 7 will support local image files.
 - ⚠️ **Note:** Source markdown is stored in the database. Add export/download feature before production so professors can back up their sources.
 
-### Phase 6 — Access control (next)
-- Enrollment model in place; enforcement in place at viewer level
-- TODO: enrollment management UI (professor invites students)
-- TODO: institutional email domain matching (e.g. `@cam.ac.uk` → auto-enroll)
-- TODO: institutional SSO (SAML / OIDC via university IdP)
+### Phase 6 — Student enrollment and course discovery
+**MVP:** Join links for independent adoption. **Phase 6+:** Institutional SSO for university-wide rollout.
+
+#### Phase 6a — Join links (MVP pathway)
+- TODO: Join links — professor shares `/:username/:course/join?token=xyz`, auto-enrolls student
+  - Generate short-lived (7 day) enrollment tokens on demand
+  - Unauthenticated students redirected to sign in first, then auto-enroll on return
+- TODO: Student dashboard at `/student/dashboard`
+  - List of enrolled courses with course cover / description
+  - "Recent posts" feed: latest posts from enrolled courses, sorted by `publishedAt` desc
+  - For each post: title, type (Post/Slides), published date, link to view
+- TODO: Course landing page at `/:username/:course` (when ENROLLED course or has public posts)
+  - Course title, description, enrollment status
+  - Syllabus: all posts in course ordered by `Post.order`
+  - Each post shows title, type, published date, prereq status (draft vs published)
+- TODO: Enrollment model: add `enrollmentToken` field (hashed + expiry) for join links
+- TODO: Add `/api/enroll` endpoint — consume token, create or verify enrollment
+
+#### Phase 6b — Institutional SSO (Phase 7)
+Long-term, institutional login is primary. Join links become optional/fallback.
+- TODO: SAML 2.0 / OIDC support via university IdP
+  - Set `SAML_METADATA_URL` or `OIDC_DISCOVERY_URL` env vars
+  - Auto-create user accounts from institutional email
+  - Extract institution affiliation (`@cam.ac.uk` → "University of Cambridge")
+- TODO: Auto-enrollment via email domain matching
+  - Professor sets course visibility to `ENROLLED`
+  - Students with `@cam.ac.uk` email auto-enroll on first login
+- TODO: Institutional profile page (`/institution/cambridge`) showing all public courses
 
 ### Phase 7 — Local-first enhancements (planned)
 This phase realizes the "local-first" design — professors keep authoritative copies on their machines.
+- TODO: Image upload & storage
+  - Set up S3/R2 bucket for asset storage
+  - Add image upload UI to editor (drag-drop or file picker)
+  - Generate signed URLs, cache invalidation
 - TODO: Markdown export/download endpoint (`GET /api/posts/:id/markdown`) so professors can back up sources
 - TODO: File System Access API — editor button to open local folder, reads/writes files directly
   - Track changes via `.tripos-press.json` metadata file (stores SHA256 hashes of each post)
   - On folder open, compute hashes and compare; only upload modified files
+  - Support local image file references in markdown (e.g., `![](./figures/fig-01.png)`)
+    - On publish, copy images to S3/R2, rewrite URLs in rendered HTML
   - After successful publish, store new hashes to avoid re-uploading
-- TODO: Bulk import — upload a folder of `.md` files, auto-create posts
+- TODO: Drag-to-reorder posts on dashboard (when folder is open via File System Access API)
+  - Reorder updates `course.yaml` and/or `Post.order` field
+  - Visual feedback (drag handle, drop zones)
+- TODO: Bulk import — upload a folder of `.md` files + images, auto-create posts
 - TODO: CLI: `tripos-press publish ./my-course/` (extracted from `content-pipeline` package)
   - Use `git status` / `git diff` to detect modified files (assumes course is a git repo)
+  - Upload images alongside markdown
 - TODO: Git remote integration — `git push tripos main` triggers publish
 
 ### Phase 8 — Quality of life (planned)
@@ -202,6 +318,15 @@ The app runs at [http://localhost:3000](http://localhost:3000).
 3. Add environment variables from `.env.example`
 4. Set `NEXTAUTH_URL` to your production URL
 
+### Performance — Incremental Static Regeneration (ISR)
+
+Published posts and slides use **Incremental Static Regeneration**: the page HTML is cached for 1 hour, then regenerated on-demand. This means:
+
+- ✅ Published content serves from Vercel's Edge Network (sub-100ms globally)
+- ✅ Database queries happen only once per hour (not per request)
+- ⏱️ Author updates appear within ~60 seconds on next request
+- 🔐 **Note:** ISR caching is safe for PUBLIC posts. When Phase 6 adds ENROLLED courses, tag-based revalidation may be needed.
+
 ---
 
 ## Tech stack
@@ -217,3 +342,4 @@ The app runs at [http://localhost:3000](http://localhost:3000).
 | Markdown | unified / remark / rehype | Composable pipeline; same code for web + future CLI |
 | Styling | Tailwind CSS + @tailwindcss/typography | Rapid UI; `prose` class for post content |
 | Hosting | Vercel (web) + Neon (DB) | Zero-config deployment; generous free tiers |
+| Asset storage (Phase 7) | S3 / Cloudflare R2 | Object storage for images; CDN delivery |

@@ -7,6 +7,13 @@ interface Props {
   params: Promise<{ username: string; course: string; slug: string }>
 }
 
+/**
+ * ISR: Revalidate published posts every hour.
+ * Note: This caches the full HTML response. For ENROLLED-only courses, consider disabling ISR
+ * (revalidate = 0) or use tag-based revalidation to invalidate on enrollment changes.
+ */
+export const revalidate = 3600 // 1 hour
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { username, course, slug } = await params
   const post = await getPost(username, course, slug)
